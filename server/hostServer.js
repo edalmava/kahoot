@@ -111,20 +111,38 @@ const LOGIN_HTML = `
 </html>
 `;
 
+// Almacén de sesiones válidas
+const validSessions = {};
+
 // Generar token de sesión
 function generateSessionToken(username) {
-  const data = username + ':' + SESSION_SECRET + ':' + Date.now();
-  return crypto.createHash('sha256').update(data).digest('hex').substring(0, 32);
+  const token = crypto.randomBytes(32).toString('hex');
+  validSessions[token] = { username, createdAt: Date.now() };
+  return token;
 }
 
 // Verificar sesión
 function verifySession(sessionToken) {
-  if (!sessionToken) return false;
-  // En producción, almacenarías sesiones válidas en memoria/disco
-  // Por ahora usamos un hash simple del token para demostrar
-  const expected = crypto.createHash('sha256').update(SESSION_SECRET).digest('hex').substring(0, 32);
-  return sessionToken === expected;
+  const session = validSessions[sessionToken];
+  if (!session) return false;
+  
+  // Expirar después de 24 horas
+  if (Date.now() - session.createdAt > 24 * 60 * 60 * 1000) {
+    delete validSessions[sessionToken];
+    return false;
+  }
+  return true;
 }
+
+// Limpiar sesiones expiradas periódicamente
+setInterval(() => {
+  const now = Date.now();
+  Object.keys(validSessions).forEach(token => {
+    if (now - validSessions[token].createdAt > 24 * 60 * 60 * 1000) {
+      delete validSessions[token];
+    }
+  });
+}, 60 * 60 * 1000); // Cada hora
 
 // Extraer cookie de sesión
 function getSessionCookie(cookieHeader) {
@@ -166,7 +184,7 @@ const server = http.createServer((req, res) => {
         // Generar sesión
         const token = generateSessionToken(username);
         res.writeHead(302, {
-          'Location': '/',
+          'Location': '/index.html',
           'Set-Cookie': SESSION_COOKIE + '=' + token + '; Path=/; HttpOnly'
         });
         res.end();
