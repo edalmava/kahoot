@@ -43,7 +43,8 @@ function App() {
   }, [questions])
 
   useEffect(() => {
-    ws.current = new WebSocket('ws://localhost:3001')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
+    ws.current = new WebSocket(wsUrl)
     ws.current.onopen = () => console.log('Host conectado al servidor')
     
     ws.current.onmessage = (event) => {
@@ -57,6 +58,9 @@ function App() {
           setPlayers(prev => [...prev, payload.name])
           break
         case 'PLAYER_LEFT':
+          setPlayers(prev => prev.filter(p => p !== payload.name))
+          break
+        case 'PLAYER_REMOVED':
           setPlayers(prev => prev.filter(p => p !== payload.name))
           break
         case 'NEW_QUESTION':
@@ -250,6 +254,12 @@ function App() {
     sendMessage('NEXT_QUESTION', { gameId })
   }
 
+  const handleRemovePlayer = (playerName) => {
+    if (confirm(`¿Remover a ${playerName} del juego?`)) {
+      sendMessage('REMOVE_PLAYER', { gameId, playerName })
+    }
+  }
+
   return (
     <div className="container">
       <h1>Kahoot Clone - HOST</h1>
@@ -349,7 +359,18 @@ function App() {
           <div className="players-list">
             <h3>Jugadores ({players.length}):</h3>
             <ul>
-              {players.map((p, i) => <li key={i}>{p}</li>)}
+              {players.map((p, i) => (
+                <li key={i}>
+                  <span>{p}</span>
+                  <button 
+                    className="btn-remove-player" 
+                    onClick={() => handleRemovePlayer(p)}
+                    title="Remover jugador"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
           {players.length > 0 && (

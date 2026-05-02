@@ -1,6 +1,15 @@
 const rooms = {};
 
 /**
+ * Envía un mensaje solo si el socket está activo.
+ */
+function sendTo(ws, message) {
+  if (ws.readyState === 1) {
+    ws.send(message);
+  }
+}
+
+/**
  * Crea una nueva sala de juego.
  * @param {string} gameId - PIN único del juego.
  * @param {WebSocket} hostWs - Socket del anfitrión.
@@ -29,20 +38,38 @@ function addPlayer(gameId, playerWs, playerName) {
   const room = rooms[gameId];
   if (!room) return { success: false, message: 'Sala no encontrada' };
   
+  // Verificar que el juego no ha comenzado
+  if (room.status !== 'waiting') {
+    return { success: false, message: 'El juego ya ha comenzado. Espera al próximo round!' };
+  }
+  
+  // Sanitizar nombre (trim y limitar longitud)
+  const sanitized = playerName.trim().slice(0, 20);
+  
+  // Validar nombre no vacío
+  if (!sanitized) {
+    return { success: false, message: 'El nombre no puede estar vacío' };
+  }
+  
+  // Validar caracteres permitidos (letras con acentos, números, espacios, guiones)
+  if (!/^[a-zA-ZáéíóúñÁÉÍÓÚÑ0-9\s-]+$/.test(sanitized)) {
+    return { success: false, message: 'Nombre inválido. Solo letras, números y guiones' };
+  }
+  
   // Evitar nombres duplicados en la misma sala
-  if (room.players.find(p => p.name === playerName)) {
+  if (room.players.find(p => p.name === sanitized)) {
     return { success: false, message: 'El nombre ya está en uso' };
   }
-
+  
   room.players.push({
     ws: playerWs,
-    name: playerName,
+    name: sanitized,
     score: 0,
     correctAnswers: 0,
     lastAnswerCorrect: false
   });
   
-  console.log(`Jugador ${playerName} unido a la sala ${gameId}`);
+  console.log(`Jugador ${sanitized} unido a la sala ${gameId}`);
   return { success: true, playerCount: room.players.length };
 }
 
@@ -51,10 +78,17 @@ function addPlayer(gameId, playerWs, playerName) {
  * @param {string} gameId 
  * @param {string} playerName 
  * @param {number} optionIndex 
+ * @param {number} questionIndex - Índice de la pregunta que responde el cliente
  */
-function submitAnswer(gameId, playerName, optionIndex) {
+function submitAnswer(gameId, playerName, optionIndex, questionIndex) {
   const room = rooms[gameId];
   if (!room || room.status !== 'active') return null;
+
+  // Validar que la pregunta sea la actual
+  if (questionIndex !== room.currentQuestion) {
+    console.log(`Respuesta rechazada para ${playerName}: pregunta incorrecta.`);
+    return { error: 'WRONG_QUESTION' };
+  }
 
   const now = Date.now();
   // Verificar si el tiempo ha expirado
@@ -161,11 +195,45 @@ function removeClient(ws) {
   }
 }
 
+/**
+ * Remueve a un jugador del juego.
+ * @param {string} gameId - PIN del juego.
+ * @param {string} playerName - Nombre del jugador a remover.
+ */
+function removePlayer(gameId, playerName) {
+  const room = rooms[gameId];
+  if (!room) return;
+  
+  const player = room.players.find(p => p.name === playerName);
+  if (!player) return;
+  
+  // Notificar al jugador
+  sendTo(player.ws, JSON.stringify({
+    type: 'REMOVED',
+    payload: { message: 'Has sido removido del juego por el anfitrión' }
+  }));
+  
+  // Cerrar conexión
+  player.ws.close();
+  
+  // Remover de la lista
+  room.players = room.players.filter(p => p.name !== playerName);
+  
+  console.log(`Jugador ${playerName} removido de la sala ${gameId}`);
+  
+  // Notificar al host
+  sendTo(room.host, JSON.stringify({
+    type: 'PLAYER_REMOVED',
+    payload: { name: playerName }
+  }));
+}
+
 module.exports = {
   rooms,
   createRoom,
   addPlayer,
   submitAnswer,
   getLeaderboard,
-  removeClient
+  removeClient,
+  removePlayer
 };

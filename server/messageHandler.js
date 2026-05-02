@@ -1,6 +1,17 @@
 const gameManager = require('./gameManager');
 
 /**
+ * Envía un mensaje solo si el socket está activo.
+ * @param {WebSocket} ws - Socket del cliente.
+ * @param {string} message - Mensaje a enviar.
+ */
+function sendTo(ws, message) {
+  if (ws.readyState === 1) {
+    ws.send(message);
+  }
+}
+
+/**
  * Procesa los mensajes entrantes de los WebSockets.
  * @param {WebSocket} ws - El socket que envía el mensaje.
  * @param {string} message - El mensaje serializado como JSON.
@@ -19,6 +30,9 @@ function handleMessage(ws, message) {
         break;
       case 'START_GAME':
         handleStartGame(ws, payload);
+        break;
+      case 'REMOVE_PLAYER':
+        handleRemovePlayer(ws, payload);
         break;
       case 'SUBMIT_ANSWER':
         handleSubmitAnswer(ws, payload);
@@ -42,7 +56,7 @@ function handleCreateGame(ws, payload) {
   const gameId = Math.floor(1000 + Math.random() * 9000).toString();
   gameManager.createRoom(gameId, ws, payload.questions);
   
-  ws.send(JSON.stringify({
+  sendTo(ws, JSON.stringify({
     type: 'GAME_CREATED',
     payload: { gameId }
   }));
@@ -55,18 +69,18 @@ function handleJoinGame(ws, payload) {
   if (result.success) {
     const room = gameManager.rooms[gameId];
     // Notificar al host
-    room.host.send(JSON.stringify({
+    sendTo(room.host, JSON.stringify({
       type: 'PLAYER_JOINED',
       payload: { name, playerCount: result.playerCount }
     }));
     
     // Confirmar al jugador (opcional pero útil)
-    ws.send(JSON.stringify({
+    sendTo(ws, JSON.stringify({
       type: 'JOIN_SUCCESS',
       payload: { gameId, name }
     }));
   } else {
-    ws.send(JSON.stringify({
+    sendTo(ws, JSON.stringify({
       type: 'ERROR',
       payload: { message: result.message }
     }));
@@ -112,24 +126,24 @@ function handleStartGame(ws, payload) {
       }
     });
 
-    room.host.send(questionMessageForHost);
-    room.players.forEach(p => p.ws.send(questionMessageForPlayers));
+    sendTo(room.host, questionMessageForHost);
+    room.players.forEach(p => sendTo(p.ws, questionMessageForPlayers));
   }
 }
 
 function handleSubmitAnswer(ws, payload) {
-  const { gameId, name, optionIndex } = payload;
-  const result = gameManager.submitAnswer(gameId, name, optionIndex);
+  const { gameId, name, optionIndex, questionIndex } = payload;
+  const result = gameManager.submitAnswer(gameId, name, optionIndex, questionIndex);
   
   if (result) {
-    ws.send(JSON.stringify({
+    sendTo(ws, JSON.stringify({
       type: 'ANSWER_RESULT',
       payload: result
     }));
     
     // Notificar al host que alguien respondió para el contador en pantalla
     const room = gameManager.rooms[gameId];
-    room.host.send(JSON.stringify({
+    sendTo(room.host, JSON.stringify({
       type: 'PLAYER_ANSWERED',
       payload: { name }
     }));
@@ -150,8 +164,8 @@ function handleShowRanking(ws, payload) {
       }
     });
     
-    room.host.send(scoreMessage);
-    room.players.forEach(p => p.ws.send(scoreMessage));
+    sendTo(room.host, scoreMessage);
+    room.players.forEach(p => sendTo(p.ws, scoreMessage));
   }
 }
 
@@ -194,8 +208,8 @@ function handleNextQuestion(ws, payload) {
       });
       
       // Enviar nueva pregunta
-      room.host.send(questionMessageForHost);
-      room.players.forEach(p => p.ws.send(questionMessageForPlayers));
+      sendTo(room.host, questionMessageForHost);
+      room.players.forEach(p => sendTo(p.ws, questionMessageForPlayers));
     } else {
       room.status = 'finished';
       const leaderboard = gameManager.getLeaderboard(gameId);
@@ -207,9 +221,18 @@ function handleNextQuestion(ws, payload) {
         }
       });
       
-      room.host.send(gameOverMessage);
-      room.players.forEach(p => p.ws.send(gameOverMessage));
+      sendTo(room.host, gameOverMessage);
+      room.players.forEach(p => sendTo(p.ws, gameOverMessage));
     }
+  }
+}
+
+function handleRemovePlayer(ws, payload) {
+  const { gameId, playerName } = payload;
+  const room = gameManager.rooms[gameId];
+  
+  if (room && room.host === ws) {
+    gameManager.removePlayer(gameId, playerName);
   }
 }
 

@@ -16,6 +16,12 @@ const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
   console.log('Nuevo cliente conectado');
+  
+  ws.isAlive = true;
+  
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
 
   ws.on('message', (message) => {
     // Convertir Buffer a string si es necesario
@@ -33,7 +39,19 @@ wss.on('connection', (ws) => {
   });
 });
 
-server.listen(PORT, () => {
+// Heartbeat: verificar conexiones cada 30 segundos
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) {
+      console.log('Conexión inactiva, cerrando...');
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
   console.log(`WebSocket server listo en ws://localhost:${PORT}`);
 });

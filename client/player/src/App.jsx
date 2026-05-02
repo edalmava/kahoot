@@ -16,14 +16,16 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(0)
   const ws = useRef(null)
   const timerRef = useRef(null)
+  const nameRef = useRef('') // Para acceder al nombre sin crear efecto
   
   // Audios para feedback
   const correctSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3'))
   const wrongSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2003/2003-preview.mp3'))
 
+  // WebSocket connection - se ejecuta solo al montar componente
   useEffect(() => {
-    // Conexión WebSocket
-    ws.current = new WebSocket('ws://localhost:3001')
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
+    ws.current = new WebSocket(wsUrl)
 
     ws.current.onopen = () => console.log('Jugador conectado al servidor')
     
@@ -38,6 +40,10 @@ function App() {
         case 'ERROR':
           setError(payload.message)
           break
+        case 'REMOVED':
+          setError(payload.message || 'Has sido removido del juego')
+          setGameState('REMOVED')
+          break
         case 'NEW_QUESTION':
           setCurrentQuestion(payload)
           setGameState('ANSWER')
@@ -49,7 +55,7 @@ function App() {
         case 'ANSWER_RESULT':
           if (payload.error === 'TIME_EXPIRED') {
             setGameState('FEEDBACK')
-            setResult(null) // Indica tiempo agotado
+            setResult(null)
             setPointsEarned(0)
             wrongSound.current.play().catch(() => {})
           } else {
@@ -67,7 +73,7 @@ function App() {
           break
         case 'SCORE_UPDATE':
           setLeaderboard(payload.leaderboard)
-          setIsFastest(payload.fastestPlayer === name)
+          setIsFastest(payload.fastestPlayer === nameRef.current)
           setGameState('RANKING')
           break;
         case 'GAME_OVER':
@@ -75,8 +81,7 @@ function App() {
           setGameState('FINAL')
           clearInterval(timerRef.current)
           
-          // Si el jugador quedó 1º, ¡disparar confeti!
-          if (payload.leaderboard && payload.leaderboard[0]?.name === name) {
+          if (payload.leaderboard && payload.leaderboard[0]?.name === nameRef.current) {
             confetti({
               particleCount: 100,
               spread: 70,
@@ -91,9 +96,8 @@ function App() {
 
     return () => {
       if (ws.current) ws.current.close()
-      clearInterval(timerRef.current)
     }
-  }, [name])
+  }, []) // Sin dependencias - solo monta/desmonta
 
   const startTimer = (seconds) => {
     setTimeLeft(seconds)
@@ -113,6 +117,7 @@ function App() {
   const handleJoin = (e) => {
     e.preventDefault()
     if (!gameId || !name) return
+    nameRef.current = name // Guardar nombre para usar en effects
     setError('')
     ws.current.send(JSON.stringify({
       type: 'JOIN_GAME',
@@ -123,7 +128,7 @@ function App() {
   const handleSubmitAnswer = (optionIndex) => {
     ws.current.send(JSON.stringify({
       type: 'SUBMIT_ANSWER',
-      payload: { gameId, name, optionIndex }
+      payload: { gameId, name, optionIndex, questionIndex: currentQuestion.index }
     }))
   }
 
@@ -205,7 +210,7 @@ function App() {
           <div className="score-display">Puntaje Total: {score}</div>
           <ol className="leaderboard">
             {leaderboard.map((p, i) => (
-              <li key={i} className={p.name === name ? 'current-player' : ''}>
+              <li key={i} className={p.name === nameRef.current ? 'current-player' : ''}>
                 <span>{p.name}</span>
                 <span>{p.score} pts</span>
               </li>
@@ -215,13 +220,22 @@ function App() {
         </div>
       )}
 
+      {gameState === 'REMOVED' && (
+        <div className="screen">
+          <h2>Has sido removido</h2>
+          <p className="error-message">{error}</p>
+          <p>Espera al próximo round!</p>
+          <button className="btn-primary" onClick={() => window.location.reload()}>Salir</button>
+        </div>
+      )}
+
       {gameState === 'FINAL' && (
         <div className="screen">
           <h2>Juego Terminado</h2>
           {leaderboard && leaderboard.length > 0 ? (
             <>
               <div className="final-rank">
-                Tu posición: {leaderboard.findIndex(p => p.name === name) + 1}º
+                Tu posición: {leaderboard.findIndex(p => p.name === nameRef.current) + 1}º
               </div>
               <div className="final-score">Puntaje Final: {score} pts</div>
             </>
