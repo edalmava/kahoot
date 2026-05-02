@@ -198,6 +198,20 @@ const server = http.createServer((req, res) => {
     return;
   }
   
+  // Ruta de logout
+  if (req.method === 'POST' && req.url === '/logout') {
+    const sessionToken = getSessionCookie(req.headers.cookie);
+    if (sessionToken && validSessions[sessionToken]) {
+      delete validSessions[sessionToken];
+    }
+    res.writeHead(302, {
+      'Location': '/',
+      'Set-Cookie': SESSION_COOKIE + '=; Path=/; HttpOnly; Max-Age=0'
+    });
+    res.end();
+    return;
+  }
+  
   // Si no está autenticado, mostrar login
   if (!isAuthenticated) {
     res.writeHead(200, { 'Content-Type': 'text/html' });

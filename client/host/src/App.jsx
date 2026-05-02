@@ -263,6 +263,15 @@ function App() {
     sendMessage('CREATE_GAME', { questions })
   }
 
+  const handleLogout = async () => {
+    try {
+      await fetch('/logout', { method: 'POST' })
+      window.location.href = '/'
+    } catch (e) {
+      console.error('Error al cerrar sesión:', e)
+    }
+  }
+
   const handleStartGame = () => {
     sendMessage('START_GAME', { gameId })
   }
@@ -284,6 +293,7 @@ function App() {
   return (
     <div className="container">
       <h1>Kahoot Clone - HOST</h1>
+      <button className="btn-logout" onClick={handleLogout}>Cerrar Sesión</button>
 
       {/* BLOQUE: CREACIÓN DE PREGUNTAS */}
       {gameState === 'CREATE_QUIZ' && (
