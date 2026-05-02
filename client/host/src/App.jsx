@@ -23,7 +23,28 @@ function App() {
   const [answeredCount, setAnsweredCount] = useState(0)
   const ws = useRef(null)
   const timerRef = useRef(null)
-  const fanfareSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3'))
+  
+  // Web Audio API para sonidos locales
+  const audioContext = useRef(null)
+  const playFanfareSound = () => {
+    if (!audioContext.current) audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
+    const ctx = audioContext.current
+    const now = ctx.currentTime
+    // Melodía simple de fanfarria
+    const notes = [523, 659, 784, 1047] // C5, E5, G5, C6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = freq
+      osc.type = 'sine'
+      gain.gain.setValueAtTime(0.2, now + i * 0.15)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.4)
+      osc.start(now + i * 0.15)
+      osc.stop(now + i * 0.15 + 0.4)
+    })
+  }
 
   // Cargar desde LocalStorage al iniciar
   useEffect(() => {
@@ -82,7 +103,7 @@ function App() {
           setLeaderboard(payload.leaderboard)
           setFastestPlayer(payload.fastestPlayer)
           setGameState('FINAL')
-          fanfareSound.current.play().catch(() => {})
+          playFanfareSound()
           confetti({
             particleCount: 200,
             spread: 90,

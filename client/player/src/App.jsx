@@ -16,11 +16,38 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(0)
   const ws = useRef(null)
   const timerRef = useRef(null)
-  const nameRef = useRef('') // Para acceder al nombre sin crear efecto
+  const nameRef = useRef('')
   
-  // Audios para feedback
-  const correctSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3'))
-  const wrongSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2003/2003-preview.mp3'))
+  // Web Audio API para sonidos locales (sin зависимости externas)
+  const audioContext = useRef(null)
+  const playCorrectSound = () => {
+    if (!audioContext.current) audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
+    const ctx = audioContext.current
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 800
+    osc.type = 'sine'
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.3)
+  }
+  const playWrongSound = () => {
+    if (!audioContext.current) audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
+    const ctx = audioContext.current
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 200
+    osc.type = 'sawtooth'
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.3)
+  }
 
   // WebSocket connection - se ejecuta solo al montar componente
   useEffect(() => {
@@ -57,16 +84,16 @@ function App() {
             setGameState('FEEDBACK')
             setResult(null)
             setPointsEarned(0)
-            wrongSound.current.play().catch(() => {})
+            playWrongSound()
           } else {
             setResult(payload.correct)
             setScore(payload.score)
             setPointsEarned(payload.pointsEarned || 0)
             setGameState('FEEDBACK')
             if (payload.correct) {
-              correctSound.current.play().catch(() => {})
+              playCorrectSound()
             } else {
-              wrongSound.current.play().catch(() => {})
+              playWrongSound()
             }
           }
           clearInterval(timerRef.current)
