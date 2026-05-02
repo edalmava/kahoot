@@ -6,6 +6,7 @@
   "scripts": {
     "server": "node server/index.js",
     "player:server": "node server/playerServer.js",
+    "host:server": "node server/hostServer.js",
     "client:host": "npm run dev --prefix client/host",
     "client:player": "npm run dev --prefix client/player",
     "dev": "concurrently \"npm run server\" \"npm run client:host\" \"npm run client:player\""
