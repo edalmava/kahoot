@@ -1,0 +1,18 @@
+{
+  "name": "kahoot-clone",
+  "version": "1.0.0",
+  "description": "Un clon de Kahoot usando Node.js y WebSockets puros",
+  "main": "server/index.js",
+  "scripts": {
+    "server": "node server/index.js",
+    "client:host": "npm run dev --prefix client/host",
+    "client:player": "npm run dev --prefix client/player",
+    "dev": "concurrently \"npm run server\" \"npm run client:host\" \"npm run client:player\""
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

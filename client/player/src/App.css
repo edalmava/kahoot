@@ -1,0 +1,170 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 80vh;
+}
+
+.screen {
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+  background-color: #f0f0f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+input {
+  padding: 1rem;
+  font-size: 1.2rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.btn-primary {
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  background-color: #46178f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.error {
+  color: #e21b3c;
+  font-weight: bold;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1rem;
+  height: 300px;
+}
+
+.option-btn {
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.option-btn:active {
+  opacity: 0.7;
+}
+
+.color-0 { background-color: #e21b3c; }
+.color-1 { background-color: #1368ce; }
+.color-2 { background-color: #d89e00; }
+.color-3 { background-color: #26890c; }
+
+.feedback {
+  justify-content: center;
+  min-height: 300px;
+}
+
+.result-icon {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.result-container {
+  padding: 2rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  color: white;
+}
+
+.result-container.correct {
+  background-color: #26890c;
+}
+
+.result-container.incorrect {
+  background-color: #e21b3c;
+}
+
+.points-plus {
+  font-size: 3rem;
+  font-weight: bold;
+}
+
+.score-display-small {
+  font-size: 1.2rem;
+  background: white;
+  padding: 0.8rem;
+  border-radius: 20px;
+  color: #666;
+}
+
+.score-display {
+  font-size: 1.5rem;
+  background: white;
+  padding: 1rem;
+  border-radius: 20px;
+}
+
+.final-rank {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #46178f;
+}
+
+.final-score {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.leaderboard {
+  text-align: left;
+  width: 100%;
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.leaderboard li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.current-player {
+  font-weight: bold;
+  color: #46178f;
+  background-color: #fff;
+  border-radius: 4px;
+  padding: 0.6rem 0.5rem !important;
+}
+
+.fastest-badge {
+  background-color: #ffeb3b;
+  color: #333;
+  padding: 0.8rem;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  border: 2px solid #fbc02d;
+  box-shadow: 0 4px 10px rgba(251, 192, 45, 0.4);
+  animation: bounce 0.5s ease infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-5px); }
+}
