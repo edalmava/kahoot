@@ -14,49 +14,51 @@ function App() {
   const [isFastest, setIsFastest] = useState(false)
   const [error, setError] = useState('')
   const [timeLeft, setTimeLeft] = useState(0)
+  const [connectionStatus, setConnectionStatus] = useState('connecting') // connected, connecting, disconnected
   const ws = useRef(null)
   const timerRef = useRef(null)
-  const nameRef = useRef('')
+  const reconnectInterval = useRef(null)
+  const nameRef = useRef(sessionStorage.getItem('kahoot_name') || '')
   
-  // Web Audio API para sonidos locales (sin зависимости externas)
-  const audioContext = useRef(null)
-  const playCorrectSound = () => {
-    if (!audioContext.current) audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
-    const ctx = audioContext.current
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.value = 800
-    osc.type = 'sine'
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.3)
-  }
-  const playWrongSound = () => {
-    if (!audioContext.current) audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
-    const ctx = audioContext.current
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.value = 200
-    osc.type = 'sawtooth'
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.3)
-  }
-
-  // WebSocket connection - se ejecuta solo al montar componente
+  // Cargar datos de sesión al iniciar
   useEffect(() => {
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
-    ws.current = new WebSocket(wsUrl)
+    const savedGameId = sessionStorage.getItem('kahoot_gameId')
+    const savedName = sessionStorage.getItem('kahoot_name')
+    if (savedGameId) setGameId(savedGameId)
+    if (savedName) setName(savedName)
+  }, [])
 
-    ws.current.onopen = () => console.log('Jugador conectado al servidor')
+  const connectWS = () => {
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
     
-    ws.current.onmessage = (event) => {
+    if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
+    console.log('Intentando conectar al WebSocket...')
+    setConnectionStatus('connecting')
+    const socket = new WebSocket(wsUrl)
+    ws.current = socket
+
+    socket.onopen = () => {
+      console.log('Jugador conectado al servidor')
+      setConnectionStatus('connected')
+      setError('')
+      clearInterval(reconnectInterval.current)
+      reconnectInterval.current = null
+
+      // Auto-rejoin si tenemos datos de sesión
+      const savedGameId = sessionStorage.getItem('kahoot_gameId')
+      const savedName = sessionStorage.getItem('kahoot_name')
+      if (savedGameId && savedName) {
+        socket.send(JSON.stringify({
+          type: 'JOIN_GAME',
+          payload: { gameId: savedGameId, name: savedName }
+        }))
+      }
+    }
+    
+    socket.onmessage = (event) => {
       const { type, payload } = JSON.parse(event.data)
       console.log('Mensaje recibido:', type, payload)
 
@@ -65,9 +67,11 @@ function App() {
           setGameState('WAITING')
           break
         case 'ERROR':
+          // No borrar datos de sesión en caso de error de join (puede ser PIN temporalmente inválido al reconectar)
           setError(payload.message)
           break
         case 'REMOVED':
+          sessionStorage.clear()
           setError(payload.message || 'Has sido removido del juego')
           setGameState('REMOVED')
           break
@@ -107,6 +111,7 @@ function App() {
           setLeaderboard(payload.leaderboard)
           setGameState('FINAL')
           clearInterval(timerRef.current)
+          sessionStorage.clear()
           
           if (payload.leaderboard && payload.leaderboard[0]?.name === nameRef.current) {
             confetti({
@@ -121,10 +126,34 @@ function App() {
       }
     }
 
+    socket.onclose = () => {
+      console.log('Socket cerrado')
+      setConnectionStatus('disconnected')
+      startReconnecting()
+    }
+
+    socket.onerror = (err) => {
+      console.error('Error en socket:', err)
+      setConnectionStatus('disconnected')
+      socket.close()
+    }
+  }
+
+  const startReconnecting = () => {
+    if (reconnectInterval.current) return
+    reconnectInterval.current = setInterval(() => {
+      connectWS()
+    }, 3000)
+  }
+
+  // WebSocket connection management
+  useEffect(() => {
+    connectWS()
     return () => {
       if (ws.current) ws.current.close()
+      if (reconnectInterval.current) clearInterval(reconnectInterval.current)
     }
-  }, []) // Sin dependencias - solo monta/desmonta
+  }, [])
 
   const startTimer = (seconds) => {
     setTimeLeft(seconds)
@@ -145,6 +174,11 @@ function App() {
     e.preventDefault()
     if (!gameId || !name) return
     nameRef.current = name // Guardar nombre para usar en effects
+    
+    // Guardar en sesión para reconexiones
+    sessionStorage.setItem('kahoot_gameId', gameId)
+    sessionStorage.setItem('kahoot_name', name)
+    
     setError('')
     ws.current.send(JSON.stringify({
       type: 'JOIN_GAME',
@@ -159,8 +193,22 @@ function App() {
     }))
   }
 
+  const getStatusText = () => {
+    switch(connectionStatus) {
+      case 'connected': return 'Conectado';
+      case 'connecting': return 'Reconectando...';
+      case 'disconnected': return 'Desconectado';
+      default: return '';
+    }
+  }
+
   return (
     <div className="container">
+      <div className={`connection-status ${connectionStatus}`}>
+        <span className={`dot ${connectionStatus}`}></span>
+        {getStatusText()}
+      </div>
+      
       <h1>Kahoot! Player</h1>
 
       {gameState === 'JOIN' && (

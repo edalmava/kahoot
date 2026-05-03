@@ -23,9 +23,38 @@ function createRoom(gameId, hostWs, questions) {
     status: 'waiting',
     questionExpiresAt: null,
     fastestPlayer: null,
-    fastestTime: Infinity
+    fastestTime: Infinity,
+    hostConnected: true,
+    hostDisconnectTimeout: null
   };
   console.log(`Sala creada: ${gameId}`);
+}
+
+/**
+ * Permite al host retomar el control de una sala.
+ */
+function reclaimRoom(gameId, newHostWs) {
+  const room = rooms[gameId];
+  if (!room) return null;
+
+  if (room.hostDisconnectTimeout) {
+    clearTimeout(room.hostDisconnectTimeout);
+    room.hostDisconnectTimeout = null;
+  }
+
+  room.host = newHostWs;
+  room.hostConnected = true;
+  console.log(`Host ha recuperado el control de la sala ${gameId}`);
+  
+  return {
+    gameId,
+    status: room.status,
+    questions: room.questions,
+    currentQuestion: room.currentQuestion,
+    players: room.players.map(p => p.name),
+    leaderboard: getLeaderboard(gameId),
+    fastestPlayer: room.fastestPlayer
+  };
 }
 
 /**
@@ -37,11 +66,6 @@ function createRoom(gameId, hostWs, questions) {
 function addPlayer(gameId, playerWs, playerName) {
   const room = rooms[gameId];
   if (!room) return { success: false, message: 'Sala no encontrada' };
-  
-  // Verificar que el juego no ha comenzado
-  if (room.status !== 'waiting') {
-    return { success: false, message: 'El juego ya ha comenzado. Espera al próximo round!' };
-  }
   
   // Sanitizar nombre (trim y limitar longitud)
   const sanitized = playerName.trim().slice(0, 20);
@@ -55,10 +79,29 @@ function addPlayer(gameId, playerWs, playerName) {
   if (!/^[a-zA-ZáéíóúñÁÉÍÓÚÑ0-9\s-]+$/.test(sanitized)) {
     return { success: false, message: 'Nombre inválido. Solo letras, números y guiones' };
   }
+
+  // Verificar si el jugador ya existe (posible reconexión)
+  const existingPlayer = room.players.find(p => p.name === sanitized);
   
-  // Evitar nombres duplicados en la misma sala
-  if (room.players.find(p => p.name === sanitized)) {
-    return { success: false, message: 'El nombre ya está en uso' };
+  if (existingPlayer) {
+    if (!existingPlayer.connected) {
+      // RECONEXIÓN: Cancelar timeout y actualizar socket
+      if (existingPlayer.disconnectTimeout) {
+        clearTimeout(existingPlayer.disconnectTimeout);
+        existingPlayer.disconnectTimeout = null;
+      }
+      existingPlayer.ws = playerWs;
+      existingPlayer.connected = true;
+      console.log(`Jugador ${sanitized} se ha reconectado a la sala ${gameId}`);
+      return { success: true, reconnect: true, playerCount: room.players.length };
+    } else {
+      return { success: false, message: 'El nombre ya está en uso y el jugador está activo' };
+    }
+  }
+  
+  // Si no es reconexión, verificar que el juego no ha comenzado
+  if (room.status !== 'waiting') {
+    return { success: false, message: 'El juego ya ha comenzado. Espera al próximo round!' };
   }
   
   room.players.push({
@@ -66,11 +109,13 @@ function addPlayer(gameId, playerWs, playerName) {
     name: sanitized,
     score: 0,
     correctAnswers: 0,
-    lastAnswerCorrect: false
+    lastAnswerCorrect: false,
+    connected: true,
+    disconnectTimeout: null
   });
   
   console.log(`Jugador ${sanitized} unido a la sala ${gameId}`);
-  return { success: true, playerCount: room.players.length };
+  return { success: true, reconnect: false, playerCount: room.players.length };
 }
 
 /**
@@ -159,37 +204,64 @@ function removeClient(ws) {
     
     // Si el que se desconecta es el host
     if (room.host === ws) {
-      console.log(`Host desconectado de la sala ${gameId}. Cerrando sala.`);
-      const leaderboard = getLeaderboard(gameId);
-      room.players.forEach(p => {
-        if (p.ws.readyState === 1) { 
-          p.ws.send(JSON.stringify({ 
-            type: 'GAME_OVER', 
-            payload: { 
-              message: 'El anfitrión se ha desconectado.',
-              leaderboard: leaderboard 
-            } 
-          }));
+      console.log(`Host desconectado (temporalmente) de la sala ${gameId}`);
+      room.hostConnected = false;
+
+      // Iniciar timeout para eliminación permanente de la sala (2 minutos)
+      room.hostDisconnectTimeout = setTimeout(() => {
+        if (!room.hostConnected) {
+          console.log(`Cerrando sala ${gameId} permanentemente por desconexión del host.`);
+          const leaderboard = getLeaderboard(gameId);
+          room.players.forEach(p => {
+            if (p.ws.readyState === 1) { 
+              p.ws.send(JSON.stringify({ 
+                type: 'GAME_OVER', 
+                payload: { 
+                  message: 'El anfitrión se ha desconectado permanentemente.',
+                  leaderboard: leaderboard 
+                } 
+              }));
+            }
+          });
+          delete rooms[gameId];
         }
-      });
-      delete rooms[gameId];
+      }, 120000);
+
       return;
     }
 
     // Si el que se desconecta es un jugador
-    const playerIndex = room.players.findIndex(p => p.ws === ws);
-    if (playerIndex !== -1) {
-      const playerName = room.players[playerIndex].name;
-      room.players.splice(playerIndex, 1);
-      console.log(`Jugador ${playerName} desconectado de la sala ${gameId}`);
+    const player = room.players.find(p => p.ws === ws);
+    if (player) {
+      const playerName = player.name;
+      player.connected = false;
+      console.log(`Jugador ${playerName} desconectado (temporalmente) de la sala ${gameId}`);
       
-      // Notificar al host que un jugador se fue
+      // Notificar al host que un jugador se fue (o perdió conexión)
       if (room.host.readyState === 1) {
         room.host.send(JSON.stringify({ 
           type: 'PLAYER_LEFT', 
-          payload: { name: playerName, playerCount: room.players.length } 
+          payload: { name: playerName, playerCount: room.players.filter(p => p.connected).length } 
         }));
       }
+
+      // Iniciar timeout para eliminación permanente (60 segundos)
+      player.disconnectTimeout = setTimeout(() => {
+        const pIndex = room.players.findIndex(p => p.name === playerName);
+        if (pIndex !== -1 && !room.players[pIndex].connected) {
+          room.players.splice(pIndex, 1);
+          console.log(`Jugador ${playerName} eliminado permanentemente por timeout de la sala ${gameId}`);
+          
+          // Notificar al host de la eliminación permanente
+          if (room.host.readyState === 1) {
+            room.host.send(JSON.stringify({ 
+              type: 'PLAYER_REMOVED', 
+              payload: { name: playerName, playerCount: room.players.filter(p => p.connected).length } 
+            }));
+          }
+        }
+      }, 60000);
+
       return;
     }
   }
@@ -231,6 +303,7 @@ function removePlayer(gameId, playerName) {
 module.exports = {
   rooms,
   createRoom,
+  reclaimRoom,
   addPlayer,
   submitAnswer,
   getLeaderboard,

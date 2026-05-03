@@ -12,6 +12,7 @@
     "dev": "concurrently \"npm run server\" \"npm run client:host\" \"npm run client:player\""
   },
   "dependencies": {
+    "jsonwebtoken": "^9.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

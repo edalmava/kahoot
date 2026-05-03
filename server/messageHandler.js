@@ -43,6 +43,9 @@ function handleMessage(ws, message) {
       case 'NEXT_QUESTION':
         handleNextQuestion(ws, payload);
         break;
+      case 'RECLAIM_GAME':
+        handleReclaimGame(ws, payload);
+        break;
       default:
         console.warn(`Tipo de mensaje desconocido: ${type}`);
     }
@@ -51,7 +54,38 @@ function handleMessage(ws, message) {
   }
 }
 
+function handleReclaimGame(ws, payload) {
+  if (!ws.isHost) {
+    return sendTo(ws, JSON.stringify({
+      type: 'ERROR',
+      payload: { message: 'No tienes permisos para reclamar esta partida.' }
+    }));
+  }
+
+  const { gameId } = payload;
+  const gameState = gameManager.reclaimRoom(gameId, ws);
+
+  if (gameState) {
+    sendTo(ws, JSON.stringify({
+      type: 'GAME_RECLAIMED',
+      payload: gameState
+    }));
+  } else {
+    sendTo(ws, JSON.stringify({
+      type: 'ERROR',
+      payload: { message: 'No se pudo recuperar la partida. PIN inválido o sala cerrada.' }
+    }));
+  }
+}
+
 function handleCreateGame(ws, payload) {
+  if (!ws.isHost) {
+    return sendTo(ws, JSON.stringify({
+      type: 'ERROR',
+      payload: { message: 'No tienes permisos para crear una partida.' }
+    }));
+  }
+  
   // Generar un PIN aleatorio de 4 dígitos
   const gameId = Math.floor(1000 + Math.random() * 9000).toString();
   gameManager.createRoom(gameId, ws, payload.questions);
@@ -91,7 +125,7 @@ function handleStartGame(ws, payload) {
   const { gameId } = payload;
   const room = gameManager.rooms[gameId];
   
-  if (room && room.host === ws) {
+  if (room && room.host === ws && ws.isHost) {
     room.status = 'active';
     room.currentQuestion = 0;
     
@@ -154,7 +188,7 @@ function handleShowRanking(ws, payload) {
   const { gameId } = payload;
   const room = gameManager.rooms[gameId];
   
-  if (room && room.host === ws) {
+  if (room && room.host === ws && ws.isHost) {
     const leaderboard = gameManager.getLeaderboard(gameId);
     const scoreMessage = JSON.stringify({
       type: 'SCORE_UPDATE',
@@ -173,7 +207,7 @@ function handleNextQuestion(ws, payload) {
   const { gameId } = payload;
   const room = gameManager.rooms[gameId];
   
-  if (room && room.host === ws) {
+  if (room && room.host === ws && ws.isHost) {
     room.currentQuestion++;
     
     if (room.currentQuestion < room.questions.length) {
@@ -231,7 +265,7 @@ function handleRemovePlayer(ws, payload) {
   const { gameId, playerName } = payload;
   const room = gameManager.rooms[gameId];
   
-  if (room && room.host === ws) {
+  if (room && room.host === ws && ws.isHost) {
     gameManager.removePlayer(gameId, playerName);
   }
 }

@@ -43,17 +43,16 @@ Esto levantará:
 ## Características Implementadas
 
 ### Seguridad y Validación
-- **Validación de nombres**: Sanitización (trim, límite 20 chars) y validación de caracteres (solo letras, números, espacios, guiones)
-- **Bloqueo de unión**: No permite nuevos jugadores una vez iniciado el juego (estado `waiting` → `active`)
-- **Validación de preguntas**: Verifica que el jugador responda la pregunta correcta (`questionIndex`)
+- **Autenticación JWT (Host)**: El anfitrión debe autenticarse mediante JWT para realizar acciones administrativas. El token se valida en el handshake del WebSocket.
+- **Validación de nombres**: Sanitización (trim, límite 20 chars) y validación de caracteres.
+- **Bloqueo de unión**: No permite nuevos jugadores una vez iniciado el juego (excepto reconexiones).
 
-### Gestión de Jugadores
-- **Eliminación de jugadores**: El host puede remover jugadores con botón X en la lista
-- **Mensaje de removido**: Jugador removido ve pantalla informative
-
-### Conexiones
-- **Heartbeat**: Ping cada 30 segundos para detectar conexiones inactivas
-- **Broadcasting seguro**: Función `sendTo()` que verifica `readyState` antes de enviar
+### Resiliencia y Conexiones
+- **Reconexión de Jugadores**: Los jugadores disponen de 60 segundos para reconectarse tras una pérdida de red sin perder sus puntos ni posición.
+- **Reconexión del Host**: Las salas permanecen activas durante 2 minutos tras la desconexión del anfitrión, permitiéndole retomar el control mediante `RECLAIM_GAME`.
+- **Indicadores de Estado**: Tanto el Host como los Jugadores tienen un indicador visual (LED + texto) del estado de su conexión WebSocket en tiempo real.
+- **Heartbeat**: Ping cada 30 segundos para detectar conexiones inactivas.
+- **Broadcasting seguro**: Función `sendTo()` que verifica `readyState` antes de enviar.
 
 ## Protocolo de Comunicación
 

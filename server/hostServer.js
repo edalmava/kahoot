@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 
 // Cargar variables de entorno desde .env sin dependencias externas
 const ENV_FILE = path.join(__dirname, '../.env');
@@ -25,6 +26,7 @@ const DIST_DIR = path.join(__dirname, '../client/host/dist');
 const AUTH_USER = process.env.HOST_USER || 'admin';
 const AUTH_PASS = process.env.HOST_PASSWORD || 'password';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'default_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'default_jwt_secret';
 const SESSION_COOKIE = 'host_session';
 
 // HTML de la página de login
@@ -171,6 +173,24 @@ const server = http.createServer((req, res) => {
   const sessionToken = getSessionCookie(req.headers.cookie);
   const isAuthenticated = verifySession(sessionToken);
   
+  // Ruta para obtener token JWT para WebSockets
+  if (req.method === 'GET' && req.url === '/api/token') {
+    if (isAuthenticated) {
+      const session = validSessions[sessionToken];
+      const token = jwt.sign(
+        { username: session.username, role: 'host' },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ token }));
+    } else {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No autenticado' }));
+    }
+    return;
+  }
+
   // Rutas especiales
   if (req.method === 'POST' && req.url === '/login') {
     let body = '';

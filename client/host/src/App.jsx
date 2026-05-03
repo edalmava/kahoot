@@ -21,6 +21,8 @@ function App() {
   const [fastestPlayer, setFastestPlayer] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
   const [answeredCount, setAnsweredCount] = useState(0)
+  const [token, setToken] = useState(null)
+  const [connectionStatus, setConnectionStatus] = useState('connecting') // connected, connecting, disconnected
   const ws = useRef(null)
   const timerRef = useRef(null)
   
@@ -63,17 +65,78 @@ function App() {
     localStorage.setItem('kahoot_quiz_draft', JSON.stringify(questions))
   }, [questions])
 
+  // Obtener token JWT al iniciar
   useEffect(() => {
+    fetch('/api/token')
+      .then(res => {
+        if (res.ok) return res.json()
+        throw new Error('No autenticado')
+      })
+      .then(data => {
+        setToken(data.token)
+      })
+      .catch(err => {
+        console.error('Error obteniendo token:', err)
+        window.location.href = '/'
+      })
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
-    ws.current = new WebSocket(wsUrl)
-    ws.current.onopen = () => console.log('Host conectado al servidor')
+    ws.current = new WebSocket(`${wsUrl}?token=${token}`)
+    
+    ws.current.onopen = () => {
+      console.log('Host conectado al servidor con JWT')
+      setConnectionStatus('connected')
+      
+      // Intentar recuperar partida si hay un PIN en sesión
+      const savedGameId = sessionStorage.getItem('kahoot_host_gameId')
+      if (savedGameId) {
+        ws.current.send(JSON.stringify({
+          type: 'RECLAIM_GAME',
+          payload: { gameId: savedGameId }
+        }))
+      }
+    }
+
+    ws.current.onclose = () => {
+      console.log('Socket cerrado')
+      setConnectionStatus('disconnected')
+    }
+
+    ws.current.onerror = () => {
+      setConnectionStatus('disconnected')
+    }
     
     ws.current.onmessage = (event) => {
       const { type, payload } = JSON.parse(event.data)
       switch (type) {
+        case 'ERROR':
+          alert(`Error: ${payload.message}`)
+          if (payload.message.includes('No se pudo recuperar')) {
+            sessionStorage.removeItem('kahoot_host_gameId')
+          }
+          break
         case 'GAME_CREATED':
           setGameId(payload.gameId)
+          sessionStorage.setItem('kahoot_host_gameId', payload.gameId)
           setGameState('WAITING')
+          break
+        case 'GAME_RECLAIMED':
+          setGameId(payload.gameId)
+          sessionStorage.setItem('kahoot_host_gameId', payload.gameId)
+          setQuestions(payload.questions)
+          setPlayers(payload.players)
+          setCurrentQuestion(payload.currentQuestion >= 0 ? payload.questions[payload.currentQuestion] : null)
+          setLeaderboard(payload.leaderboard)
+          setFastestPlayer(payload.fastestPlayer)
+          
+          // Mapeo de estado del servidor a UI del cliente
+          if (payload.status === 'waiting') setGameState('WAITING')
+          else if (payload.status === 'active') setGameState('RANKING') // Volver al ranking es lo más seguro
+          else if (payload.status === 'finished') setGameState('FINAL')
           break
         case 'PLAYER_JOINED':
           setPlayers(prev => [...prev, payload.name])
@@ -119,7 +182,7 @@ function App() {
       if (ws.current) ws.current.close()
       clearInterval(timerRef.current)
     }
-  }, [])
+  }, [token])
 
   const startTimer = (seconds) => {
     clearInterval(timerRef.current)
@@ -290,8 +353,27 @@ function App() {
     }
   }
 
+  const getStatusText = () => {
+    switch(connectionStatus) {
+      case 'connected': return 'Conectado';
+      case 'connecting': return 'Conectando...';
+      case 'disconnected': return 'Desconectado';
+      default: return '';
+    }
+  }
+
+  const handleNewGame = () => {
+    sessionStorage.removeItem('kahoot_host_gameId')
+    window.location.reload()
+  }
+
   return (
     <div className="container">
+      <div className={`connection-status ${connectionStatus}`}>
+        <span className={`dot ${connectionStatus}`}></span>
+        {getStatusText()}
+      </div>
+
       <h1>Kahoot Clone - HOST</h1>
       <button className="btn-logout" onClick={handleLogout}>Cerrar Sesión</button>
 
@@ -467,7 +549,7 @@ function App() {
               </div>
             ))}
           </div>
-          <button className="btn-primary" onClick={() => window.location.reload()}>Nueva Partida</button>
+          <button className="btn-primary" onClick={handleNewGame}>Nueva Partida</button>
           <button className="btn-secondary" onClick={exportResults} disabled={leaderboard.length === 0}>
             📊 Exportar a Excel
           </button>
