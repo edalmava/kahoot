@@ -469,6 +469,10 @@ function App() {
       {gameState === 'WAITING' && (
         <div className="screen">
           <h2>PIN del Juego: <span className="pin">{gameId}</span></h2>
+          <p style={{ fontSize: '0.85rem', opacity: 0.6, marginTop: '1rem' }}>
+            Los alumnos se conectan en{' '}
+            <code>{import.meta.env.VITE_WS_URL?.replace('ws://', 'http://').replace('3001', '5174')}</code>
+          </p>
           <div className="players-list">
             <h3>Jugadores ({players.length}):</h3>
             <ul>
