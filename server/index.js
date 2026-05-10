@@ -61,8 +61,23 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('message', (message) => {
+    const timestamp = Date.now();
     // Convertir Buffer a string si es necesario
     const messageStr = message.toString();
+    
+    let logSuffix = '';
+    try {
+      const parsed = JSON.parse(messageStr);
+      if (parsed.type === 'SUBMIT_ANSWER' && parsed.payload?.name) {
+        logSuffix = ` | Jugador: ${parsed.payload.name}`;
+      } else if (parsed.type === 'JOIN_GAME' && parsed.payload?.name) {
+        logSuffix = ` | Jugador: ${parsed.payload.name}`;
+      }
+      console.log(`[${new Date(timestamp).toISOString()}] [RAW_RECEIVE] Tipo: ${parsed.type}${logSuffix}`);
+    } catch (e) {
+      console.log(`[${new Date(timestamp).toISOString()}] [RAW_RECEIVE] Mensaje no parseable`);
+    }
+
     messageHandler.handleMessage(ws, messageStr);
   });
 

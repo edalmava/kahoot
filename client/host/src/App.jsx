@@ -377,6 +377,13 @@ function App() {
       <h1>Kahoot Clone - HOST</h1>
       <button className="btn-logout" onClick={handleLogout}>Cerrar Sesión</button>
 
+      {gameId && gameState !== 'CREATE_QUIZ' && (
+        <div className="game-info-header">
+          <span className="info-label">PIN DEL JUEGO:</span>
+          <span className="info-value">{gameId}</span>
+        </div>
+      )}
+
       {/* BLOQUE: CREACIÓN DE PREGUNTAS */}
       {gameState === 'CREATE_QUIZ' && (
         <div className="screen creation-screen">
@@ -500,6 +507,7 @@ function App() {
         <div className="screen">
           <div className="timer">Tiempo: {timeLeft}s</div>
           <div className="stats">Respuestas: {answeredCount} / {players.length}</div>
+          <h3 className="question-counter">Pregunta {currentQuestion.index + 1} de {questions.length}</h3>
           <h2>{currentQuestion.text}</h2>
           <div className="options-grid">
             {currentQuestion.options.map((opt, i) => {

@@ -1,79 +1,94 @@
-# Kahoot Clone - Node.js + WebSockets Puros
+# Kahoot Clone - Node.js + WebSockets
 
-Este proyecto es un clon simplificado de Kahoot desarrollado con Node.js en el backend y React en el frontend, utilizando WebSockets nativos (`ws` en el servidor y `new WebSocket()` en el navegador).
+Clon simplificado de Kahoot con Node.js/WebSockets en el backend y React 19 en el frontend.
 
 ## Arquitectura
 
-- **Servidor**: Node.js con `ws`. Gestiona salas, jugadores y estado del juego en memoria.
-- **Host (Anfitrión)**: Aplicación React para mostrar las preguntas, PIN de sala y ranking.
-- **Player (Jugador)**: Aplicación React optimizada para móviles para unirse a partidas y responder.
+| Componente | Descripción | Puerto |
+|------------|-------------|--------|
+| **server/** | Node.js + `ws`. Gestiona salas y estado en memoria. | 3001 |
+| **client/host/** | React 19 (ESM/Vite). Creación de cuestionarios y vista del host. | 5173 |
+| **client/player/** | React 19 (ESM/Vite). Vista optimizada para móviles. | 5174 |
 
 ## Requisitos
 
-- Node.js (v14 o superior)
-- npm
+- Node.js 18+
+- npm 9+
 
 ## Instalación
 
-1. Clona el repositorio.
-2. Instala las dependencias en la raíz:
-   ```bash
-   npm install
-   ```
-3. Instala las dependencias de los clientes:
-   ```bash
-   cd client/host && npm install
-   cd ../player && npm install
-   cd ../..
-   ```
+```bash
+npm install
+cd client/host && npm install
+cd ../player && npm install
+```
 
 ## Ejecución
 
-Para ejecutar todo el sistema (servidor + host + player) en paralelo:
-
 ```bash
-npm run dev
+npm run dev          # Todo junto (servidor + host + player)
+npm run server       # Solo servidor
+npm run client:host  # Solo host
+npm run client:player # Solo player
 ```
 
-Esto levantará:
-- **Servidor**: http://localhost:3001
-- **Host**: http://localhost:5173
-- **Player**: http://localhost:5174
+## Características
 
-## Características Implementadas
+### Quiz y Preguntas
+- Creación de cuestionarios con 4 opciones y tiempo configurable por pregunta.
+- Importar/exportar cuestionarios en JSON.
+- Contador de progreso: "Pregunta X de N".
+- Exportar resultados a Excel (.xlsx) al finalizar.
+
+### Sonidos (Web Audio API)
+- Sin archivos externos.
+- **Host**: Fanfarria al terminar el juego.
+- **Player**: Melodías de acierto/error estilo Kahoot.
 
 ### Seguridad y Validación
-- **Autenticación JWT (Host)**: El anfitrión debe autenticarse mediante JWT para realizar acciones administrativas. El token se valida en el handshake del WebSocket.
-- **Validación de nombres**: Sanitización (trim, límite 20 chars) y validación de caracteres.
-- **Bloqueo de unión**: No permite nuevos jugadores una vez iniciado el juego (excepto reconexiones).
+- **Autenticación JWT**: El host usa token vía query param en WebSocket.
+- **Validación de nombres**: Trim, límite 20 caracteres.
+- **Bloqueo de unión**: No permite nuevos jugadores tras iniciar.
 
-### Resiliencia y Conexiones
-- **Reconexión de Jugadores**: Los jugadores disponen de 60 segundos para reconectarse tras una pérdida de red sin perder sus puntos ni posición.
-- **Reconexión del Host**: Las salas permanecen activas durante 2 minutos tras la desconexión del anfitrión, permitiéndole retomar el control mediante `RECLAIM_GAME`.
-- **Indicadores de Estado**: Tanto el Host como los Jugadores tienen un indicador visual (LED + texto) del estado de su conexión WebSocket en tiempo real.
-- **Heartbeat**: Ping cada 30 segundos para detectar conexiones inactivas.
-- **Broadcasting seguro**: Función `sendTo()` que verifica `readyState` antes de enviar.
+### Resiliencia
+- **Reconexión de Jugadores**: 60 segundos para reconectarse sin perder puntos.
+- **Reconexión del Host**: 2 minutos para retomar sala con `RECLAIM_GAME`.
+- **Indicadores de estado**: LED visual de conexión en tiempo real.
+- **Heartbeat**: Ping cada 30s para detectar conexiones inactivas.
 
-## Protocolo de Comunicación
+## Protocolo WebSocket
 
-Los mensajes se envían como strings JSON con la estructura:
-```json
-{
-  "type": "NOMBRE_DEL_EVENTO",
-  "payload": { ... datos ... }
-}
-```
+Mensajes JSON: `{ "type": "EVENT_NAME", "payload": { ... } }`
 
 ### Eventos Principales
-- `CREATE_GAME`: Crea una sala.
-- `JOIN_GAME`: Un jugador se une a una sala.
-- `START_GAME`: Inicia la partida.
-- `SUBMIT_ANSWER`: Envía una respuesta (incluye `questionIndex`).
-- `NEXT_QUESTION`: Avanza a la siguiente pregunta o muestra el ranking.
-- `REMOVE_PLAYER`: El host remueve a un jugador.
-- `PLAYER_REMOVED`: Notifica al host que un jugador fue removido.
+
+| Evento | Descripción |
+|--------|-------------|
+| `CREATE_GAME` | Host crea una sala. |
+| `JOIN_GAME` | Jugador se une con gameId + nombre. |
+| `START_GAME` | Host inicia la partida. |
+| `NEW_QUESTION` | Envía pregunta (host recibe `correctAnswer`, players no). Incluye `index` y `totalQuestions`. |
+| `SUBMIT_ANSWER` | Jugador responde con `optionIndex` y `questionIndex`. |
+| `ANSWER_RESULT` | Resultado al jugador (correct/incorrect + puntos). |
+| `SCORE_UPDATE` | Ranking actualizado. |
+| `SHOW_RANKING` | Host muestra ranking entre preguntas. |
+| `NEXT_QUESTION` | Host avanza a siguiente pregunta. |
+| `REMOVE_PLAYER` | Host remueve jugador. |
+| `GAME_OVER` | Fin del juego con ranking final. |
 
 ### Códigos de Error
-- `TIME_EXPIRED`: El tiempo de la pregunta se agotó.
-- `ALREADY_ANSWERED`: El jugador ya respondió.
-- `WRONG_QUESTION`: El jugador respondió una pregunta que no es la actual.
+
+| Código | Significado |
+|--------|-------------|
+| `TIME_EXPIRED` | Tiempo agotado. |
+| `ALREADY_ANSWERED` | Ya respondió esta pregunta. |
+| `WRONG_QUESTION` | Respondió pregunta incorrecta. |
+| `PLAYER_NOT_FOUND` | Jugador no encontrado. |
+
+## Variables de Entorno
+
+Crear `.env` en la raíz:
+
+```env
+JWT_SECRET=tu_secreto_aqui
+```

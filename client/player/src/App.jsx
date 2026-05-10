@@ -18,7 +18,59 @@ function App() {
   const ws = useRef(null)
   const timerRef = useRef(null)
   const reconnectInterval = useRef(null)
+  const audioContext = useRef(null)
   const nameRef = useRef(sessionStorage.getItem('kahoot_name') || '')
+
+  const getAudioContext = () => {
+    if (!audioContext.current) {
+      audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
+    }
+    return audioContext.current
+  }
+
+  const playCorrectSound = () => {
+    try {
+      const ctx = getAudioContext()
+      const now = ctx.currentTime
+      const notes = [523, 659, 784, 1047]
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.frequency.value = freq
+        osc.type = 'sine'
+        gain.gain.setValueAtTime(0.25, now + i * 0.12)
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.12 + 0.3)
+        osc.start(now + i * 0.12)
+        osc.stop(now + i * 0.12 + 0.3)
+      })
+    } catch (e) {
+      console.error('Error playing correct sound:', e)
+    }
+  }
+
+  const playWrongSound = () => {
+    try {
+      const ctx = getAudioContext()
+      const now = ctx.currentTime
+      const notes = [350, 280, 220]
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.frequency.value = freq
+        osc.type = 'sawtooth'
+        gain.gain.setValueAtTime(0.15, now + i * 0.15)
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.35)
+        osc.start(now + i * 0.15)
+        osc.stop(now + i * 0.15 + 0.35)
+      })
+    } catch (e) {
+      console.error('Error playing wrong sound:', e)
+    }
+  }
   
   // Cargar datos de sesión al iniciar
   useEffect(() => {
@@ -84,11 +136,19 @@ function App() {
           startTimer(payload.timeLimit)
           break
         case 'ANSWER_RESULT':
-          if (payload.error === 'TIME_EXPIRED') {
-            setGameState('FEEDBACK')
-            setResult(null)
-            setPointsEarned(0)
-            playWrongSound()
+          console.log(`[${new Date().toISOString()}] [CLIENT_RECEIVE] ANSWER_RESULT recibida`);
+          if (payload.error) {
+            console.error(`Error en respuesta: ${payload.error}`);
+            if (payload.error === 'TIME_EXPIRED') {
+              setGameState('FEEDBACK')
+              setResult(null)
+              setPointsEarned(0)
+              playWrongSound()
+            } else {
+              // Otros errores (PLAYER_NOT_FOUND, WRONG_QUESTION, etc.)
+              setError(`Error: ${payload.error}`);
+              setGameState('JOIN'); // Devolver al inicio o manejar según sea necesario
+            }
           } else {
             setResult(payload.correct)
             setScore(payload.score)
@@ -162,7 +222,9 @@ function App() {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timerRef.current)
-          // No forzamos feedback aquí, dejamos que el servidor o el anfitrión controlen el flujo
+          // Bloquear interfaz localmente al agotar tiempo
+          setGameState('FEEDBACK')
+          setResult(null)
           return 0
         }
         return prev - 1
@@ -187,6 +249,10 @@ function App() {
   }
 
   const handleSubmitAnswer = (optionIndex) => {
+    if (gameState !== 'ANSWER' || timeLeft <= 0) return
+
+    console.log(`[${new Date().toISOString()}] [CLIENT_SEND] Enviando SUBMIT_ANSWER para opción ${optionIndex}`);
+    setGameState('WAITING_RESULT')
     ws.current.send(JSON.stringify({
       type: 'SUBMIT_ANSWER',
       payload: { gameId, name, optionIndex, questionIndex: currentQuestion.index }
@@ -208,6 +274,13 @@ function App() {
         <span className={`dot ${connectionStatus}`}></span>
         {getStatusText()}
       </div>
+
+      {gameState !== 'JOIN' && gameState !== 'REMOVED' && (
+        <div className="player-info-bar">
+          <span className="player-name-tag">👤 {nameRef.current}</span>
+          <span className="game-pin-tag">📍 PIN: {gameId}</span>
+        </div>
+      )}
       
       <h1>Kahoot! Player</h1>
 
@@ -242,7 +315,7 @@ function App() {
 
       {gameState === 'ANSWER' && currentQuestion && (
         <div className="screen">
-          <h3>Pregunta {currentQuestion.index + 1}</h3>
+          <h3>Pregunta {currentQuestion.index + 1} de {currentQuestion.totalQuestions}</h3>
           <div className="options-grid">
             {currentQuestion.options.map((_, i) => (
               <button 
@@ -252,6 +325,13 @@ function App() {
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {gameState === 'WAITING_RESULT' && (
+        <div className="screen">
+          <div className="loader"></div>
+          <p>Enviando respuesta...</p>
         </div>
       )}
 

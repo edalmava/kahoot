@@ -15,8 +15,8 @@ npm run dev
 
 # Individual
 npm run server          # Node server on :3001
-npm run client:host    # Host app on :5173
-npm run client:player  # Player app on :5174
+npm run client:host     # Host app on :5173
+npm run client:player   # Player app on :5174
 
 # Per-client lint/build
 cd client/host && npm run lint
@@ -30,7 +30,7 @@ cd client/player && npm run build
 - **Server**: CommonJS (`require`/`module.exports`). Never add `type: "module"` or ESM imports here — `ws` is used as CJS.
 - **Clients**: ESM (`"type": "module"` in package.json). React files are `.jsx`.
 - **WebSocket URL**: Both clients connect directly to `ws://localhost:3001`. The Vite proxy config (`/ws` → `ws://localhost:3001`) exists but clients use the direct URL in `new WebSocket()`.
-- **messageHandler.js:216**: Uses `module.exports` (CommonJS). The export is `module.exports = { handleMessage }`. All callers use `.handleMessage` - it works as a property access.
+- **messageHandler.js**: Uses `module.exports = { handleMessage }`. All callers use `.handleMessage` - it works as a property access.
 - **No tests exist** in this repo.
 
 ## Server Ports
@@ -45,6 +45,15 @@ Messages are JSON strings: `{ "type": "EVENT_NAME", "payload": { ... } }`.
 
 Server → Host includes `correctAnswer` in `NEW_QUESTION`. Server → Players does NOT include `correctAnswer`.
 
+## Host Authentication
+
+Host requires JWT. Token is obtained from `/api/token` endpoint and passed as query param: `ws://localhost:3001?token=xxx`.
+
 ## Project Language
 
 Spanish (README, code comments, variable names, WebSocket event types).
+
+## Recent Changes (2026-05-09)
+
+- **Sounds**: Host and Player use Web Audio API (no external audio files). See `client/host/src/App.jsx:31-49` (fanfare) and `client/player/src/App.jsx:23-76` (correct/wrong).
+- **NEW_QUESTION payload**: Includes `index` (0-based) and `totalQuestions` (from `room.questions.length`).

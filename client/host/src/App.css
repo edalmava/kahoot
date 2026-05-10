@@ -396,3 +396,27 @@
 .btn-logout:hover {
   background: #444;
 }
+
+.game-info-header {
+  background: #46178f;
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 1rem 0;
+  box-shadow: 0 4px 15px rgba(70, 23, 143, 0.3);
+}
+
+.info-label {
+  font-size: 1.2rem;
+  opacity: 0.8;
+  letter-spacing: 1px;
+}
+
+.info-value {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+}
